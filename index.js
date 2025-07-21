@@ -28,20 +28,24 @@ app.post('/process-recording', async (req, res) => {
   const recordingUrl = req.body.RecordingUrl;
   console.log("URL de l'enregistrement :", recordingUrl);
 
+  // Réponse immédiate et très courte à Twilio
   const twiml = new twilio.twiml.VoiceResponse();
   twiml.say({ language: 'fr-FR' }, "Merci, je traite votre demande.");
-  res.type('text/xml');
+  res.set('Content-Type', 'text/xml');
   res.send(twiml.toString());
 
-  // Attendre 2 secondes avant la transcription
-  setTimeout(async () => {
-    try {
-      const text = await transcribeAudioFromUrl(recordingUrl, OPENAI_API_KEY);
-      console.log("Transcription Whisper :", text);
-    } catch (err) {
-      console.error("Erreur de transcription :", err.message);
+  // Transcription en arrière-plan
+  try {
+    if (!recordingUrl) {
+      console.error("RecordingUrl manquant dans la requête.");
+      return;
     }
-  }, 2000);
+
+    const transcription = await transcribeAudioFromUrl(recordingUrl, OPENAI_API_KEY);
+    console.log("Transcription Whisper :", transcription);
+  } catch (err) {
+    console.error("Erreur de transcription :", err.message);
+  }
 });
 
 const PORT = process.env.PORT || 3000;
