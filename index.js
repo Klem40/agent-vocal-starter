@@ -1,6 +1,8 @@
 const express = require('express');
 const twilio = require('twilio');
 const bodyParser = require('body-parser');
+const transcribeAudioFromUrl = require('./transcription');
+const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const app = express();
 app.use(bodyParser.urlencoded({ extended: false }));
@@ -9,6 +11,7 @@ const VOICE_MESSAGE = "Bonjour, bienvenue chez Skeall. Que puis-je faire pour vo
 
 app.post('/voice', (req, res) => {
   const twiml = new twilio.twiml.VoiceResponse();
+
   twiml.say({ language: 'fr-FR', voice: 'alice' }, VOICE_MESSAGE);
   twiml.record({
     maxLength: 15,
@@ -16,17 +19,26 @@ app.post('/voice', (req, res) => {
     method: 'POST',
     transcribe: false
   });
+
   res.type('text/xml');
   res.send(twiml.toString());
 });
 
-app.post('/process-recording', (req, res) => {
+app.post('/process-recording', async (req, res) => {
   const recordingUrl = req.body.RecordingUrl;
   console.log("URL de l'enregistrement :", recordingUrl);
+
   const twiml = new twilio.twiml.VoiceResponse();
   twiml.say({ language: 'fr-FR' }, "Merci, je traite votre demande.");
   res.type('text/xml');
   res.send(twiml.toString());
+
+  try {
+    const text = await transcribeAudioFromUrl(recordingUrl, OPENAI_API_KEY);
+    console.log("Transcription Whisper :", text);
+  } catch (err) {
+    console.error("Erreur de transcription :", err.message);
+  }
 });
 
 const PORT = process.env.PORT || 3000;
