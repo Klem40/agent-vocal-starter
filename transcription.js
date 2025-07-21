@@ -6,11 +6,19 @@ const path = require("path");
 const TWILIO_ACCOUNT_SID = process.env.TWILIO_ACCOUNT_SID;
 const TWILIO_AUTH_TOKEN = process.env.TWILIO_AUTH_TOKEN;
 
+function wait(ms) {
+  return new Promise(resolve => setTimeout(resolve, ms));
+}
+
 async function transcribeAudioFromUrl(audioUrl, openaiApiKey) {
   const filePath = path.join("/tmp", "audio.wav");
 
+  console.log("⏳ Attente de 3 secondes avant téléchargement de l’audio...");
+  await wait(3000); // ⚠️ twilio met parfois du temps à rendre dispo le fichier
+
   try {
-    // Authentification basique Twilio
+    console.log("📥 Téléchargement de :", audioUrl + ".wav");
+
     const response = await axios({
       method: "get",
       url: `${audioUrl}.wav`,
@@ -21,7 +29,6 @@ async function transcribeAudioFromUrl(audioUrl, openaiApiKey) {
       },
     });
 
-    // Sauvegarde temporaire
     const writer = fs.createWriteStream(filePath);
     response.data.pipe(writer);
 
@@ -30,7 +37,8 @@ async function transcribeAudioFromUrl(audioUrl, openaiApiKey) {
       writer.on("error", reject);
     });
 
-    // Préparer l'envoi à OpenAI Whisper
+    console.log("✅ Audio téléchargé, envoi à Whisper...");
+
     const form = new FormData();
     form.append("file", fs.createReadStream(filePath));
     form.append("model", "whisper-1");
@@ -48,10 +56,11 @@ async function transcribeAudioFromUrl(audioUrl, openaiApiKey) {
       }
     );
 
+    console.log("📝 Transcription reçue.");
     return transcript.data;
 
   } catch (err) {
-    console.error("Erreur dans la transcription :", err.message);
+    console.error("❌ Erreur dans la transcription :", err.message);
     throw err;
   }
 }
