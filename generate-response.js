@@ -1,23 +1,25 @@
-const { Configuration, OpenAIApi } = require("openai");
-
-const configuration = new Configuration({
-  apiKey: process.env.OPENAI_API_KEY,
+const OpenAI = require("openai");
+const openai = new OpenAI({
+  apiKey: process.env.OPENAI_API_KEY
 });
 
-const openai = new OpenAIApi(configuration);
-
-async function generateResponse(transcript) {
-  const systemPrompt = `Tu es un assistant vocal pour un restaurant français. Réponds poliment, de façon naturelle et concise. Donne une réponse claire à la demande du client.`;
-
-  const completion = await openai.createChatCompletion({
+async function generateResponse(prompt) {
+  const completion = await openai.chat.completions.create({
     model: "gpt-4",
     messages: [
-      { role: "system", content: systemPrompt },
-      { role: "user", content: transcript },
+      {
+        role: "system",
+        content: "Tu es un assistant de réservation de restaurant. Réponds de manière concise et polie."
+      },
+      {
+        role: "user",
+        content: prompt
+      }
     ],
+    temperature: 0.7
   });
 
-  return completion.data.choices[0].message.content.trim();
+  return completion.choices[0].message.content;
 }
 
 module.exports = generateResponse;
