@@ -1,23 +1,17 @@
-const OpenAI = require("openai");
-const openai = new OpenAI();
+module.exports = async function generateResponse(transcript) {
+  const lower = transcript.toLowerCase();
 
-async function generateResponse(transcript) {
-  const completion = await openai.chat.completions.create({
-    messages: [
-      {
-        role: "system",
-        content: "Tu es un assistant vocal de réservation très rapide, poli, qui parle en une seule phrase courte.",
-      },
-      {
-        role: "user",
-        content: transcript,
-      },
-    ],
-    model: "gpt-3.5-turbo",
-    max_tokens: 50,
-  });
+  if (lower.includes("réserver") || lower.includes("table")) {
+    return "Très bien, pour combien de personnes souhaitez-vous réserver ?";
+  }
 
-  return completion.choices[0].message.content;
-}
+  if (lower.includes("deux") || lower.includes("3") || lower.includes("quatre")) {
+    return "Merci. À quel nom puis-je noter la réservation ?";
+  }
 
-module.exports = generateResponse;
+  if (lower.includes("je m'appelle") || lower.includes("nom")) {
+    return "Merci beaucoup, votre réservation est notée. À bientôt !";
+  }
+
+  return "Pouvez-vous reformuler s'il vous plaît ?";
+};
