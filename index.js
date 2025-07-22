@@ -2,6 +2,7 @@ const express = require('express');
 const twilio = require('twilio');
 const bodyParser = require('body-parser');
 const transcribeAudioFromUrl = require('./transcription');
+const generateResponse = require('./generate-response');
 const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
 
 const app = express();
@@ -28,23 +29,27 @@ app.post('/process-recording', async (req, res) => {
   const recordingUrl = req.body.RecordingUrl;
   console.log("URL de l'enregistrement :", recordingUrl);
 
-  // Réponse immédiate et très courte à Twilio
+  // Réponse rapide à Twilio
   const twiml = new twilio.twiml.VoiceResponse();
   twiml.say({ language: 'fr-FR' }, "Merci, je traite votre demande.");
   res.set('Content-Type', 'text/xml');
   res.send(twiml.toString());
 
-  // Transcription en arrière-plan
+  // Traitement asynchrone
   try {
     if (!recordingUrl) {
-      console.error("RecordingUrl manquant dans la requête.");
+      console.error("RecordingUrl manquant");
       return;
     }
 
     const transcription = await transcribeAudioFromUrl(recordingUrl, OPENAI_API_KEY);
-    console.log("Transcription Whisper :", transcription);
+    console.log("📝 Transcription :", transcription);
+
+    const response = await generateResponse(transcription);
+    console.log("🤖 Réponse GPT :", response);
+
   } catch (err) {
-    console.error("Erreur de transcription :", err.message);
+    console.error("Erreur GPT ou transcription :", err.message);
   }
 });
 
