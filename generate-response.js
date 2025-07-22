@@ -1,22 +1,20 @@
 const OpenAI = require("openai");
-const openai = new OpenAI({
-  apiKey: process.env.OPENAI_API_KEY
-});
+const openai = new OpenAI();
 
-async function generateResponse(prompt) {
+async function generateResponse(transcript) {
   const completion = await openai.chat.completions.create({
-    model: "gpt-4",
     messages: [
       {
         role: "system",
-        content: "Tu es un assistant de réservation de restaurant. Réponds de manière concise et polie."
+        content: "Tu es un assistant vocal de réservation très rapide, poli, qui parle en une seule phrase courte.",
       },
       {
         role: "user",
-        content: prompt
-      }
+        content: transcript,
+      },
     ],
-    temperature: 0.7
+    model: "gpt-3.5-turbo",
+    max_tokens: 50,
   });
 
   return completion.choices[0].message.content;
