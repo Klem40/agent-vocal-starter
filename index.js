@@ -1,91 +1,62 @@
 const express = require("express");
 const bodyParser = require("body-parser");
+const axios = require("axios");
 const fs = require("fs");
-const https = require("https");
-const path = require("path");
+const FormData = require("form-data");
+const { exec } = require("child_process");
+const { OpenAI } = require("openai");
 const twilio = require("twilio");
-const transcribeAudio = require("./transcription");
-const generateResponse = require("./generate-response");
 
 const app = express();
-const port = process.env.PORT || 10000;
-
 app.use(bodyParser.urlencoded({ extended: false }));
-app.use(bodyParser.json());
 
-// Téléchargement de l'audio Twilio
-async function downloadAudio(url) {
-  console.log("⏳ Attente de 3 secondes avant téléchargement de l’audio...");
-  await new Promise((resolve) => setTimeout(resolve, 3000));
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
-  const filePath = path.join(__dirname, "recording.wav");
-
-  return new Promise((resolve, reject) => {
-    const file = fs.createWriteStream(filePath);
-    https.get(`${url}.wav`, (response) => {
-      response.pipe(file);
-      file.on("finish", () => {
-        file.close();
-        console.log("📥 Audio téléchargé, envoi à Whisper...");
-        resolve(filePath);
-      });
-    }).on("error", (err) => {
-      fs.unlink(filePath, () => {});
-      reject(err);
-    });
-  });
-}
-
-// Route initiale de réponse à l'appel
-app.post("/voice", (req, res) => {
-  const twiml = new twilio.twiml.VoiceResponse();
-  twiml.say(
-    {
-      voice: "Polly.Celine-Neural",
-      language: "fr-FR",
-    },
-    "Bonjour, vous pouvez parler après le bip. Nous allons vous répondre."
-  );
-  twiml.record({
-    timeout: 3,
-    transcribe: false,
-    maxLength: 15,
-    action: "/recording",
-    method: "POST",
-  });
-  res.type("text/xml");
-  res.send(twiml.toString());
-});
-
-// Route de traitement après l'enregistrement
-app.post("/recording", async (req, res) => {
+app.post("/voice", async (req, res) => {
   const recordingUrl = req.body.RecordingUrl;
-  console.log("📞 URL de l'enregistrement :", recordingUrl);
 
-  if (!recordingUrl) return res.send("Missing recording URL");
-
-  const audioPath = await downloadAudio(recordingUrl);
-  const transcript = await transcribeAudio(audioPath);
-  console.log("📝 Transcription :", transcript);
-
-  const responseText = await generateResponse(transcript);
-  console.log("🤖 Réponse GPT :", responseText);
-
+  // 🧠 Répondre immédiatement à Twilio pour éviter que ça raccroche
   const twiml = new twilio.twiml.VoiceResponse();
-  twiml.say(
-    {
-      voice: "Polly.Celine-Neural",
-      language: "fr-FR",
-    },
-    responseText
-  );
-  twiml.redirect("/voice");
+  twiml.say({ voice: "Polly.Celine", language: "fr-FR" }, "Merci, je traite votre demande.");
+  res.type("text/xml").send(twiml.toString());
 
-  res.type("text/xml");
-  res.send(twiml.toString());
+  // 🔁 Continue en asynchrone
+  if (!recordingUrl) return;
+
+  console.log("📞 URL de l'enregistrement :", recordingUrl);
+  const audioUrl = `${recordingUrl}.wav`;
+
+  console.log("⏳ Attente de 3 secondes avant téléchargement de l’audio...");
+  await new Promise((r) => setTimeout(r, 3000));
+
+  const audioPath = "/tmp/audio.wav";
+  const writer = fs.createWriteStream(audioPath);
+
+  const response = await axios.get(audioUrl, { responseType: "stream" });
+  response.data.pipe(writer);
+
+  await new Promise((resolve) => writer.on("finish", resolve));
+  console.log("✅ Audio téléchargé, envoi à Whisper...");
+
+  const transcription = await openai.audio.transcriptions.create({
+    file: fs.createReadStream(audioPath),
+    model: "whisper-1",
+    language: "fr"
+  });
+
+  const prompt = `Tu es un assistant vocal de réservation de restaurant. L'utilisateur dit : "${transcription.text}". Réponds très brièvement, très naturellement, en tutoyant, et évite les questions inutiles.`;
+
+  const completion = await openai.chat.completions.create({
+    model: "gpt-4",
+    messages: [{ role: "user", content: prompt }]
+  });
+
+  const gptResponse = completion.choices[0].message.content.trim();
+  console.log("📝 Transcription :", transcription.text);
+  console.log("🤖 Réponse GPT :", gptResponse);
 });
 
-// Lancer le serveur
+const port = process.env.PORT || 10000;
 app.listen(port, () => {
-  console.log("🚀 Serveur en écoute sur le port", port);
+  console.log(`🚀 Serveur en écoute sur le port ${port}`);
 });
