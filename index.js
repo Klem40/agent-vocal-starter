@@ -1,59 +1,47 @@
-const express = require('express');
-const twilio = require('twilio');
-const bodyParser = require('body-parser');
-const transcribeAudioFromUrl = require('./transcription');
-const generateResponse = require('./generate-response');
-const OPENAI_API_KEY = process.env.OPENAI_API_KEY;
+const express = require("express");
+const bodyParser = require("body-parser");
+const transcribeAudioFromUrl = require("./transcription");
+const generateResponse = require("./generate-response");
 
 const app = express();
+const port = process.env.PORT || 10000;
+
 app.use(bodyParser.urlencoded({ extended: false }));
 
-const VOICE_MESSAGE = "Bonjour, bienvenue chez Skeall. Que puis-je faire pour vous aujourd’hui ?";
-
-app.post('/voice', (req, res) => {
-  const twiml = new twilio.twiml.VoiceResponse();
-
-  twiml.say({ language: 'fr-FR', voice: 'alice' }, VOICE_MESSAGE);
-  twiml.record({
-    maxLength: 15,
-    action: '/process-recording',
-    method: 'POST',
-    transcribe: false
-  });
-
-  res.type('text/xml');
-  res.send(twiml.toString());
-});
-
-app.post('/process-recording', async (req, res) => {
+app.post("/voice", async (req, res) => {
   const recordingUrl = req.body.RecordingUrl;
-  console.log("URL de l'enregistrement :", recordingUrl);
+  console.log("📞 URL de l'enregistrement :", recordingUrl);
 
-  // Réponse rapide à Twilio
-  const twiml = new twilio.twiml.VoiceResponse();
-  twiml.say({ language: 'fr-FR' }, "Merci, je traite votre demande.");
-  res.set('Content-Type', 'text/xml');
-  res.send(twiml.toString());
+  if (!recordingUrl) {
+    return res.status(400).send("Aucune URL d'enregistrement fournie.");
+  }
 
-  // Traitement asynchrone
   try {
-    if (!recordingUrl) {
-      console.error("RecordingUrl manquant");
-      return;
-    }
+    console.log("⏳ Attente de 3 secondes avant téléchargement de l’audio...");
+    await new Promise(resolve => setTimeout(resolve, 3000));
 
-    const transcription = await transcribeAudioFromUrl(recordingUrl, OPENAI_API_KEY);
-    console.log("📝 Transcription :", transcription);
+    console.log("📥 Téléchargement de :", `${recordingUrl}.wav`);
+    const transcript = await transcribeAudioFromUrl(recordingUrl, process.env.OPENAI_API_KEY);
 
-    const response = await generateResponse(transcription);
-    console.log("🤖 Réponse GPT :", response);
+    console.log("✅ Audio téléchargé, envoi à Whisper...");
+    console.log("📝 Transcription reçue.");
+    console.log("Transcription Whisper :", transcript);
 
-  } catch (err) {
-    console.error("Erreur GPT ou transcription :", err.message);
+    const responseText = await generateResponse(transcript);
+    console.log("🤖 Réponse générée :", responseText);
+
+    res.set("Content-Type", "text/xml");
+    res.send(`
+      <Response>
+        <Say language="fr-FR" voice="alice">${responseText}</Say>
+      </Response>
+    `);
+  } catch (error) {
+    console.error("❌ Erreur dans la transcription ou la génération :", error);
+    res.status(500).send("Erreur du serveur.");
   }
 });
 
-const PORT = process.env.PORT || 3000;
-app.listen(PORT, () => {
-  console.log(`Serveur en écoute sur le port ${PORT}`);
+app.listen(port, () => {
+  console.log(`🚀 Serveur en écoute sur le port ${port}`);
 });
